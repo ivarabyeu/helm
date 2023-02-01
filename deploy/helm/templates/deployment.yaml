@@ -1,0 +1,117 @@
+{{- range $service := .Values.services}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}
+  name: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}
+  annotations:
+    configmap.reloader.stakater.com/reload: "{{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}-vars"
+    secret.reloader.stakater.com/reload: "{{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}-secrets"
+spec:
+  replicas: {{ $service.deployment.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}
+  
+  template:
+    metadata:
+      {{- if $service.deployment.monitoring.enabled }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "{{ $service.deployment.monitoring.path | default "/metrics" }}"
+        prometheus.io/port: "{{ $service.deployment.monitoring.port | default 80 }}"
+      {{- end }}
+      labels:
+        app: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}
+        {{- if $service.extraLabels }}
+        {{- toYaml $service.extraLabels | nindent 8 }}
+        {{- end }}
+    spec:
+      containers:
+      - image: {{ $service.image.repo}}:{{ $service.image.tag }}
+        imagePullPolicy: {{ $service.image.pullPolicy | default "IfNotPresent" }}
+        name: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}
+        #Rendering resource limits block, from actual experience this is best variant
+        resources:
+          {{- with $service.deployment.resources }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+        #Enable probes functionality, sometimes usefull to turn off for debug purposes
+        {{- if $service.deployment.probes.enabled }}
+        startupProbe:
+          httpGet:
+            path: {{ $service.deployment.probes.startupProbeProbePath | default "/health/startup" }}
+            port: {{ $service.deployment.probes.port | default 80 }}
+          failureThreshold: 3
+          periodSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: {{ $service.deployment.probes.readinessProbePath | default "/health/ready" }}
+            port: {{ $service.deployment.probes.port | default 80 }}
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: {{ $service.deployment.probes.livenessProbeProbePath | default "/health/live" }}
+            port: {{ $service.deployment.probes.port | default 80 }}
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        {{- end }}
+        #Loading ConfiMap and Secrets into environment
+        envFrom:
+          - configMapRef:
+              name: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}-vars
+        {{- if $service.secrets }}
+          - secretRef:
+              name: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}-secrets
+        {{- end }}
+        #Specific stuff related to Grafana observability linking of logs with traces and metrics, builtin grafana agent
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          - name: DOTNET_SHUTDOWNTIMEOUTSECONDS
+            value: "30"
+          - name: ATTRIBUTES_K8S_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: OTEL_RESOURCE_ATTRIBUTES
+            value: ip=$(ATTRIBUTES_K8S_POD_IP)
+          {{- if $service.extraEnvs }}
+          {{- toYaml $service.extraEnvs | nindent 10 }}
+          {{- end }}
+        #Port container exposing
+        ports:
+        {{- if $service.deployment.ports }}
+        {{- toYaml $service.deployment.ports | nindent 8 }}
+        {{- else }}
+          - containerPort: 80
+            protocol: TCP
+        {{- end }}
+        {{- if $service.extraPortsDeployment }}
+        {{- toYaml $service.extraPortsDeployment | nindent 10 }}
+        {{- end }}
+      {{- if $service.serviceAccountName }}
+      serviceAccountName: {{ $service.serviceAccountName | default "default" }}
+      {{- end }}
+      {{- if $service.nodeSelector }}
+      nodeSelector:
+{{ toYaml $service.nodeSelector | indent 8 }}
+      {{- end }}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60
+  strategy:
+    {{- if $service.deployment.strategy }}
+    type: {{ $service.deployment.strategy.type }}
+    {{- else }}
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+    {{- end }}
+---
+{{- end }}

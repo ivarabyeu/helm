@@ -1,0 +1,37 @@
+{{- range $index, $service := .Values.services}}
+{{- if $service.ingress }}
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}-ingressroute
+spec:
+  entryPoints:
+    - web
+  routes:
+{{- range $index, $ingress := $service.ingress}}
+  - kind: Rule
+    services:
+    - name: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}
+      port: 80
+    {{- if $ingress.sticky }} #??
+      sticky:
+        cookie:
+          name: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}-cookie
+    {{- end }}
+   {{- if $ingress.pathPrefix }}
+    match: Host(`{{ $ingress.host }}`) && PathPrefix(`{{ $ingress.pathPrefix }}`)
+   {{- else }}
+    match: Host(`{{ $ingress.host }}`)
+   {{- end }}
+   {{- if $ingress.middleware }}
+    middlewares:
+   {{- range $index, $middleware := $ingress.middleware}}
+   {{- range $key, $rulename := $middleware.rule}}
+    - name: {{ $ingress.host }}-{{ lower $key }}-{{ regexReplaceAll "/" (lower ($ingress.pathPrefix | default "")) "" | default $index }}
+   {{- end }}
+   {{- end }}
+   {{- end }}
+{{- end }}
+{{- end }}
+---
+{{- end }}

@@ -1,0 +1,6 @@
+name: commonhelm
+description: Prototype
+version: __build_number__
+apiVersion: v1
+keywords:
+  - commonhelm

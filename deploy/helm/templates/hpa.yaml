@@ -1,0 +1,23 @@
+{{- range $service := .Values.services}}
+{{- if $service.deployment.scaling.enabled }}
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}
+  minReplicas: {{ $service.deployment.scaling.minReplicas | default "2"}}
+  maxReplicas: {{ $service.deployment.scaling.maxReplicas | default "5"}}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+  {{- end }}
+---
+{{- end }}

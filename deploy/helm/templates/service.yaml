@@ -1,0 +1,27 @@
+{{- range $service := .Values.services}}
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}
+  name: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}
+spec:
+  ports:
+  {{- if $service.service }}
+    {{- if $service.service.ports }}
+    {{- toYaml $service.service.ports | nindent 2 }}
+    {{- end -}}
+  {{- else }}
+    - name: web
+      protocol: TCP
+      port: 80
+      targetPort: 80
+  {{- end }}
+  {{- if $service.extraPortsService }}
+  {{- toYaml $service.extraPortsService | nindent 4 }}
+  {{- end }}
+
+  selector:
+    app: {{ $service.app.name }}-{{ $service.app.type }}-{{ $service.app.brand }}
+---
+{{- end }}

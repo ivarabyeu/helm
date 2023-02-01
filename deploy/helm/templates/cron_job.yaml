@@ -1,0 +1,33 @@
+{{- range $index, $job := .Values.jobs}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $job.name }}-cron-job-{{ $job.brand }}
+spec:
+  schedule: {{ $job.configuration.schedule }}
+  concurrencyPolicy: {{ $job.configuration.concurrencyPolicy }}
+  suspend: false
+  successfulJobsHistoryLimit: 10
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: {{ $job.configuration.startingDeadlineSeconds }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: {{ $job.name }}
+            image: {{ $job.image.repo}}:{{ $job.image.tag }}
+            imagePullPolicy: IfNotPresent
+          
+            envFrom:
+              - configMapRef:
+              {{- if $job.variables }}
+                  name: {{ $job.name }}-cron-job-{{ $job.brand }}-vars
+              {{- end }}
+{{- if $job.secrets }}
+              - secretRef:
+                  name: {{ $job.name }}-cron-job-{{ $job.brand }}-secrets
+              {{- end }}
+          restartPolicy: {{ $job.configuration.restartPolicy }}
+---
+{{- end }}
